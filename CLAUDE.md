@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Context files
+
+Detailed context lives in `agent/` — Claude Code loads these automatically:
+
+@agent/working-style.md
+@agent/cicd.md
+@agent/kernels.md
+
 ## Project Overview
 
 **KernelFlow** — An automated CUDA kernel optimization and CI/CD deployment platform for LLM inference.

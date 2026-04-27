@@ -1,0 +1,27 @@
+# Jenkins controller image with all plugins pre-installed.
+# Build once; ship to minikube as a local image.
+#
+# Build:
+#   docker build -f jenkins/Dockerfile.jenkins -t kernelflow-jenkins:latest .
+#
+# The resulting image embeds all plugins so Jenkins starts fully configured
+# without hitting the internet on every container restart.
+
+FROM jenkins/jenkins:lts-jdk17
+
+# Skip the setup wizard — JCasC handles all configuration
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+ENV CASC_JENKINS_CONFIG="/var/jenkins_home/casc"
+
+USER root
+
+# Install the plugin CLI and pre-bake all plugins at image build time
+COPY jenkins/plugins.txt /usr/share/jenkins/plugins.txt
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/plugins.txt \
+        --latest true \
+        --verbose
+
+# Copy JCasC config into the image so it's available at startup
+COPY jenkins/casc /var/jenkins_home/casc
+
+USER jenkins

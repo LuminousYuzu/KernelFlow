@@ -1,0 +1,149 @@
+# Jenkins Configuration as Code (JCasC)
+#
+# Jenkins reads this file at startup (CASC_JENKINS_CONFIG env var).
+# All ${VAR} references are injected from docker-compose environment.
+#
+# To reload without restarting Jenkins:
+#   Manage Jenkins → Configuration as Code → Reload existing configuration
+
+jenkins:
+  systemMessage: "KernelFlow — Automated CUDA Kernel CI/CD"
+  numExecutors: 0            # controller runs no jobs; all work goes to K8s pods
+
+  # ---------------------------------------------------------------------------
+  # Security
+  # ---------------------------------------------------------------------------
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          name: "KernelFlow Admin"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  # ---------------------------------------------------------------------------
+  # Kubernetes cloud — points at the local minikube cluster
+  # ---------------------------------------------------------------------------
+  clouds:
+    - kubernetes:
+        name: "minikube"
+        serverUrl: "${MINIKUBE_API_URL}"    # e.g. https://127.0.0.1:PORT (from setup.sh)
+        namespace: "default"
+
+        # Jenkins URL as seen FROM inside the minikube pod
+        # The pod must be able to reach the Jenkins controller over the LAN
+        jenkinsUrl: "http://${PC_LAN_IP}:8080"
+        jenkinsTunnel: "${PC_LAN_IP}:50000"
+
+        credentialsId: "minikube-sa-token"
+        skipTlsVerify: true    # minikube uses a self-signed cert
+        connectTimeout: 60
+        readTimeout: 60
+
+        # Default pod template — used for any agent that doesn't specify one
+        # The Jenkinsfile overrides this with k8s/jenkins-agent.yaml
+        templates:
+          - name: "default"
+            namespace: "default"
+            label: "k8s"
+            containers:
+              - name: "jnlp"
+                image: "jenkins/inbound-agent:latest"
+                alwaysPullImage: false
+
+# ---------------------------------------------------------------------------
+# Credentials store
+# ---------------------------------------------------------------------------
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # Kubernetes service account token (created by setup.sh)
+          - string:
+              id: "minikube-sa-token"
+              secret: "${MINIKUBE_SA_TOKEN}"
+              description: "minikube Jenkins service account token"
+
+          # GitHub personal access token (repo + webhook scopes)
+          - string:
+              id: "GITHUB_TOKEN"
+              secret: "${GITHUB_TOKEN}"
+              description: "GitHub PAT — repo read + webhook write"
+
+          # Weights & Biases upload key
+          - string:
+              id: "WANDB_API_KEY"
+              secret: "${WANDB_API_KEY}"
+              description: "wandb API key for benchmark result upload"
+
+# ---------------------------------------------------------------------------
+# Global tool configuration
+# ---------------------------------------------------------------------------
+tool:
+  git:
+    installations:
+      - name: "Default"
+        home: "git"
+
+# ---------------------------------------------------------------------------
+# Jobs — Multibranch Pipeline for KernelFlow
+#
+# Jenkins scans the GitHub repo, discovers branches and PRs, and runs
+# the Jenkinsfile found on each branch.  GitHub webhook triggers the scan
+# on every push (registered by scripts/register_webhook.sh).
+# ---------------------------------------------------------------------------
+jobs:
+  - script: |
+      multibranchPipelineJob('kernelflow') {
+        displayName('KernelFlow')
+        description('Fused CUDA kernel CI/CD — RMSNorm+RoPE → SiLU+Mul → Attention')
+
+        branchSources {
+          branchSource {
+            source {
+              github {
+                id('kernelflow-source')
+                repoOwner('LuminousYuzu')
+                repository('KernelFlow')
+                credentialsId('GITHUB_TOKEN')
+                repositoryUrl('https://github.com/LuminousYuzu/KernelFlow')
+                traits {
+                  // Discover all branches
+                  gitHubBranchDiscovery { strategyId(1) }
+                  // Discover PRs from origin (same-repo forks)
+                  gitHubPullRequestDiscovery { strategyId(1) }
+                }
+              }
+            }
+            strategy {
+              defaultBranchPropertyStrategy {
+                props { noTriggerBranchProperty() }
+              }
+            }
+          }
+        }
+
+        factory {
+          workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+          }
+        }
+
+        // Scan every 5 minutes as fallback if webhook is missed
+        triggers {
+          periodicFolderTrigger {
+            interval('5m')
+          }
+        }
+
+        // Keep last 10 builds per branch; discard older ones
+        orphanedItemStrategy {
+          discardOldItems {
+            numToKeep(10)
+          }
+        }
+      }

@@ -1,0 +1,60 @@
+# Jenkins plugin list for KernelFlow CI/CD
+# Installed by jenkins-plugin-cli at container startup via Dockerfile.jenkins
+#
+# Pin exact versions for reproducible builds.
+# To update: docker run --rm jenkins/jenkins:lts-jdk17 jenkins-plugin-cli --list
+
+# ---------------------------------------------------------------------------
+# Pipeline core
+# ---------------------------------------------------------------------------
+workflow-aggregator:latest
+pipeline-stage-view:latest
+pipeline-graph-analysis:latest
+build-timeout:latest
+timestamper:latest
+ansicolor:latest
+
+# ---------------------------------------------------------------------------
+# Source control & GitHub integration
+# ---------------------------------------------------------------------------
+git:latest
+github:latest
+github-branch-source:latest       # multibranch pipeline + PR discovery
+github-api:latest
+
+# ---------------------------------------------------------------------------
+# Kubernetes agent
+# ---------------------------------------------------------------------------
+kubernetes:latest
+kubernetes-cli:latest
+kubernetes-credentials:latest
+
+# ---------------------------------------------------------------------------
+# Configuration as Code (JCasC)
+# ---------------------------------------------------------------------------
+configuration-as-code:latest
+
+# ---------------------------------------------------------------------------
+# Credentials & secrets
+# ---------------------------------------------------------------------------
+credentials:latest
+credentials-binding:latest
+plain-credentials:latest
+
+# ---------------------------------------------------------------------------
+# Test & coverage reporting
+# ---------------------------------------------------------------------------
+cobertura:latest
+junit:latest
+
+# ---------------------------------------------------------------------------
+# Blue Ocean UI
+# ---------------------------------------------------------------------------
+blueocean:latest
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+ws-cleanup:latest                  # cleanWs() in post{}
+build-discarder:latest
+matrix-auth:latest

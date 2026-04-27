@@ -2,16 +2,26 @@
 //
 // Stages: Build → Static Analysis → Test + Coverage → Benchmark → Deploy
 //
-// Runs inside a GPU-enabled minikube pod (k8s/jenkins-agent.yaml).
+// Triggered by GitHub webhook on every push / PR (registered via
+// scripts/register_webhook.sh). Runs inside a GPU-enabled minikube pod
+// described in k8s/jenkins-agent.yaml.
 // Deploy stage only executes on pushes to `main`.
 //
-// Required Jenkins credentials:
-//   WANDB_API_KEY  — Weights & Biases upload key (kind: Secret text)
-//
-// Required Jenkins plugins:
-//   Kubernetes, Blue Ocean, Cobertura (or Coverage), Git
+// Required Jenkins credentials (configured via jenkins/casc/jenkins.yaml):
+//   WANDB_API_KEY   — Weights & Biases upload key
+//   GITHUB_TOKEN    — GitHub PAT for repo access
+//   minikube-sa-token — K8s service account token
 
 pipeline {
+
+    // Link this pipeline back to the GitHub repository (shows build status
+    // badges and enables the "Open in GitHub" button in Blue Ocean)
+    properties([
+        gitLabConnection(''),
+        [$class: 'GithubProjectProperty',
+         projectUrlStr: 'https://github.com/LuminousYuzu/KernelFlow/'],
+        pipelineTriggers([githubPush()])
+    ])
 
     agent {
         kubernetes {
