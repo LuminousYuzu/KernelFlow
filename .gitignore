@@ -67,3 +67,30 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+.pytest_cache/
+htmlcov/
+coverage.xml
+*.gcda
+*.gcno
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.whl
+
+# Benchmark output
+benchmark_result.txt
+
+# Nsight / profiling
+*.qdrep
+*.nsys-rep
+*.ncu-rep
+
+# wandb
+wandb/
+
+# VS Code (local IDE config — not portable across machines)
+.vscode/

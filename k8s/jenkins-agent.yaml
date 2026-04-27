@@ -1,0 +1,78 @@
+# GPU-enabled Jenkins agent pod spec for minikube + NVIDIA Device Plugin.
+#
+# Jenkins Kubernetes plugin reads this as the podTemplate.
+# Each pipeline job runs inside an isolated pod with one GPU.
+#
+# Prerequisites on the GPU PC:
+#   minikube start --driver=docker --gpus=all
+#   kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.5/nvidia-device-plugin.yml
+#
+# Reference this file in Jenkinsfile:
+#   podTemplate(yaml: readFile('k8s/jenkins-agent.yaml')) { ... }
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: kernelflow-agent
+spec:
+  # Tolerate GPU nodes tainted with nvidia.com/gpu=present:NoSchedule
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+  restartPolicy: Never
+
+  containers:
+    # ------------------------------------------------------------------
+    # Primary build container — runs all pipeline stages
+    # ------------------------------------------------------------------
+    - name: cuda-build
+      image: kernelflow-build:latest   # built from ./Dockerfile; loaded into minikube
+      imagePullPolicy: Never           # image is pre-loaded, not from a registry
+
+      command: ["cat"]
+      tty: true
+
+      resources:
+        limits:
+          nvidia.com/gpu: "1"          # request exactly one GPU
+          memory: "16Gi"
+          cpu: "8"
+        requests:
+          nvidia.com/gpu: "1"
+          memory: "8Gi"
+          cpu: "4"
+
+      env:
+        - name: CUDA_HOME
+          value: /usr/local/cuda
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: all
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: compute,utility
+
+      volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        - name: registry-cache
+          mountPath: /registry          # wheel output → local registry
+
+    # ------------------------------------------------------------------
+    # JNLP sidecar — Jenkins agent communication
+    # ------------------------------------------------------------------
+    - name: jnlp
+      image: jenkins/inbound-agent:latest
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+
+  volumes:
+    - name: workspace
+      emptyDir: {}
+    - name: registry-cache
+      hostPath:
+        path: /opt/kernelflow/registry   # local wheel registry on the GPU PC
+        type: DirectoryOrCreate
