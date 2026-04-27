@@ -1,0 +1,48 @@
+---
+# clang-tidy configuration for KernelFlow CUDA/C++ sources.
+#
+# Run:
+#   clang-tidy kernels/**/*.cu -- \
+#     -x cuda --cuda-gpu-arch=sm_86 \
+#     -I/usr/local/cuda/include \
+#     -std=c++17
+#
+# Disabled checks are annotated with the reason.
+
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -modernize-use-trailing-return-type,
+  -readability-magic-numbers,
+  -readability-identifier-length
+
+WarningsAsErrors: >
+  clang-diagnostic-error,
+  clang-analyzer-core.NullDereference,
+  clang-analyzer-core.uninitialized*
+
+HeaderFilterRegex: 'kernels/.*\.(cuh|h)$'
+
+CheckOptions:
+  - key:   readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  - key:   readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key:   readability-identifier-naming.LocalVariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key:   readability-identifier-naming.StructCase
+    value: CamelCase
+  - key:   readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key:   cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: true
