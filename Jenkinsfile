@@ -54,7 +54,9 @@ pipeline {
                     make -C ${BUILD_DIR} -j$(nproc)
                 '''
                 // Also build the PyTorch extension wheel (used by tests & deploy)
-                sh 'pip3 install -e . --no-build-isolation -q'
+                // Non-editable install (-e removed) because PyTorch CUDAExtension's
+                // setup.py does not implement PEP 660 build_editable hook.
+                sh 'pip3 install . --no-build-isolation -q'
             }
             post {
                 failure { error "Build failed — check nvcc output above." }
