@@ -10,7 +10,6 @@ Run on the GPU PC:
     pytest tests/test_fused_rmsnorm_rope.py -v --tb=short
 """
 
-import math
 import pytest
 import torch
 
@@ -19,7 +18,7 @@ skip_no_cuda   = pytest.mark.skipif(not CUDA_AVAILABLE, reason="CUDA required")
 
 # Import the compiled extension; skip entire module gracefully if not built yet
 try:
-    import kernelflow as kf          # type: ignore
+    import kernelflow as kf          # type: ignore  # noqa: I001
     HAS_EXT = True
 except ImportError:
     HAS_EXT = False

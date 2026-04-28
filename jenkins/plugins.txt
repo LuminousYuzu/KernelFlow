@@ -48,13 +48,12 @@ cobertura:latest
 junit:latest
 
 # ---------------------------------------------------------------------------
-# Blue Ocean UI
+# Pipeline UI (replaces Blue Ocean which is no longer maintained)
 # ---------------------------------------------------------------------------
-blueocean:latest
+pipeline-graph-view:latest
 
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
 ws-cleanup:latest                  # cleanWs() in post{}
-build-discarder:latest
 matrix-auth:latest

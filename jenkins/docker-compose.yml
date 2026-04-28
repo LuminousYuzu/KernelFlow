@@ -47,6 +47,10 @@ services:
 
     user: root    # required to read the kube/minikube volume mounts
 
+    networks:
+      - default
+      - minikube
+
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8080/login"]
       interval: 30s
@@ -57,3 +61,8 @@ services:
 volumes:
   jenkins_home:
     driver: local
+
+networks:
+  default: {}
+  minikube:
+    external: true

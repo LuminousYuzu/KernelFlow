@@ -1,4 +1,5 @@
 #include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>     // at::cuda::getCurrentCUDAStream()
 #include "baseline/rmsnorm.cuh"
 #include "baseline/rope.cuh"
 #include "fused/fused_rmsnorm_rope.cuh"
