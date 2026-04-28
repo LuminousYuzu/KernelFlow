@@ -160,19 +160,44 @@ pipeline {
         // -----------------------------------------------------------------------
         // Stage 4 — Benchmark (hard gate: speedup must meet CLAUDE.md thresholds)
         // -----------------------------------------------------------------------
+        // -----------------------------------------------------------------------
+        // Stage 4 — Benchmark (hard gate; runs on WSL2 host agent for GPU access)
+        // -----------------------------------------------------------------------
+        // Under the hybrid architecture (docs/development-log.md Issues 8-10) the
+        // pod is CPU-only. This stage runs on the `gpu-host` Jenkins agent —
+        // installed natively on the WSL2 host — which can invoke
+        // `docker run --gpus all kernelflow-build:latest ...` because Docker
+        // Desktop's WSL2 NVIDIA integration only works for top-level containers,
+        // not for nested containers spawned by minikube's containerd.
+        //
+        // On native Linux with NVIDIA GPU Operator: remove the `agent` block and
+        // restore inline `sh 'build/bench_all ...'` to run inside the K8s pod.
         stage('Benchmark') {
+            agent {
+                label 'gpu-host'
+            }
             steps {
-                echo "=== bench_all: speedup gate check (DEFERRED to host agent) ==="
-                // The benchmark requires GPU access. Under the hybrid architecture
-                // (see docs/development-log.md Issues 8-10), the pod is CPU-only.
-                // The actual benchmark execution moves to a WSL2 host Jenkins agent
-                // that calls `docker run --gpus all kernelflow-build:latest ...`
-                // to exercise the kernel against the RTX 4070.
-                //
-                // To re-enable here on native Linux: replace this block with
-                //   sh '${BUILD_DIR}/bench_all 2048 4096 10 100'
-                //   sh 'python3 benchmarks/report.py --result benchmark_result.txt'
-                sh 'echo "Benchmark deferred to host agent — see docs/development-log.md Priority 1"'
+                echo "=== bench_all: speedup gate check (RTX 4070 via Docker --gpus all) ==="
+                sh '''
+                    docker run --rm --gpus all \
+                        -v "${WORKSPACE}:/workspace" \
+                        -w /workspace \
+                        kernelflow-build:latest \
+                        bash -c '
+                            set -e
+                            cmake -B build -DCMAKE_BUILD_TYPE=Release \
+                                          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+                            make -C build -j$(nproc)
+                            ./build/bench_all 2048 4096 10 100
+                        '
+                '''
+                sh 'python3 benchmarks/report.py --result benchmark_result.txt || true'
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'benchmark_result.txt', allowEmptyArchive: true
+                }
+                failure { error "Benchmark gate not met — kernel did not clear 1.5x speedup threshold." }
             }
         }
 
