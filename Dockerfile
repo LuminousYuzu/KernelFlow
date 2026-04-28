@@ -1,6 +1,7 @@
 # KernelFlow build environment
-# Base: CUDA 12.0 devel — includes nvcc, cuBLAS, cuDNN headers, compute-sanitizer
-FROM nvidia/cuda:12.0.0-devel-ubuntu22.04
+# Base: CUDA 12.1 devel — matches PyTorch 2.3 cu121 wheel ABI requirements
+# (PyTorch 2.3 cu121 needs libnvJitLink symbols only present in CUDA 12.1+)
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 
 # Prevent apt from prompting during build
 ENV DEBIAN_FRONTEND=noninteractive
