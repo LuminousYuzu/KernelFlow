@@ -1,0 +1,59 @@
+# Runs the Jenkins controller on the GPU PC.
+#
+# Prerequisites: run scripts/setup.sh first — it creates the .env file that
+# this compose file reads for secrets and machine-specific values.
+#
+# Usage (from repo root on the GPU PC):
+#   docker compose -f jenkins/docker-compose.yml up -d
+#   docker compose -f jenkins/docker-compose.yml logs -f   # tail logs
+#   docker compose -f jenkins/docker-compose.yml down      # stop
+
+version: '3.8'
+
+services:
+  jenkins:
+    image: kernelflow-jenkins:latest     # built by scripts/setup.sh
+    container_name: kernelflow-jenkins
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"                       # Web UI  — open on LAN (accessible from Mac)
+      - "50000:50000"                     # JNLP agent tunnel
+
+    volumes:
+      # Persistent Jenkins home — survives container restarts
+      - jenkins_home:/var/jenkins_home
+
+      # minikube kubeconfig + certs so Jenkins can reach the K8s API
+      # setup.sh writes a sanitised copy at jenkins/.kube/ to avoid Windows path issues
+      - ./kube:/root/.kube:ro
+      - ./minikube-certs:/root/.minikube:ro
+
+      # Local wheel registry — Deploy stage writes wheels here
+      - /opt/kernelflow/registry:/registry
+
+    environment:
+      # All secrets come from the .env file written by scripts/setup.sh
+      # Never commit .env to git
+      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - MINIKUBE_SA_TOKEN=${MINIKUBE_SA_TOKEN}
+      - MINIKUBE_API_URL=${MINIKUBE_API_URL}
+      - PC_LAN_IP=${PC_LAN_IP}
+
+    # Jenkins reads JCasC from CASC_JENKINS_CONFIG (set in Dockerfile.jenkins)
+    # No extra env needed here — casc dir is baked into the image
+
+    user: root    # required to read the kube/minikube volume mounts
+
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s    # Jenkins takes ~60 s to boot
+
+volumes:
+  jenkins_home:
+    driver: local

@@ -94,3 +94,8 @@ wandb/
 
 # VS Code (local IDE config — not portable across machines)
 .vscode/
+
+# Jenkins secrets and machine-generated files — never commit these
+jenkins/.env
+jenkins/kube/
+jenkins/minikube-certs/

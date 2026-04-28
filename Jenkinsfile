@@ -2,23 +2,28 @@
 //
 // Stages: Build → Static Analysis → Test + Coverage → Benchmark → Deploy
 //
-// Runs inside a GPU-enabled minikube pod (k8s/jenkins-agent.yaml).
+// Triggered by GitHub webhook on every push / PR (registered via
+// scripts/register_webhook.sh). Runs inside a GPU-enabled minikube pod
+// described in k8s/jenkins-agent.yaml.
 // Deploy stage only executes on pushes to `main`.
 //
-// Required Jenkins credentials:
-//   WANDB_API_KEY  — Weights & Biases upload key (kind: Secret text)
-//
-// Required Jenkins plugins:
-//   Kubernetes, Blue Ocean, Cobertura (or Coverage), Git
+// Required Jenkins credentials (configured via jenkins/casc/jenkins.yaml):
+//   WANDB_API_KEY   — Weights & Biases upload key
+//   GITHUB_TOKEN    — GitHub PAT for repo access
+//   minikube-sa-token — K8s service account token
 
 pipeline {
 
     agent {
         kubernetes {
-            yaml readFile('k8s/jenkins-agent.yaml')
+            yamlFile 'k8s/jenkins-agent.yaml'
             defaultContainer 'cuda-build'
             retries 1
         }
+    }
+
+    triggers {
+        githubPush()
     }
 
     options {
