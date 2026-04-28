@@ -16,7 +16,7 @@ pipeline {
 
     agent {
         kubernetes {
-            yaml readFile('k8s/jenkins-agent.yaml')
+            yamlFile 'k8s/jenkins-agent.yaml'
             defaultContainer 'cuda-build'
             retries 1
         }
