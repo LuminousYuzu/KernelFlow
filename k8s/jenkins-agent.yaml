@@ -1,14 +1,13 @@
-# GPU-enabled Jenkins agent pod spec for minikube + NVIDIA Device Plugin.
+# CPU-only Jenkins agent pod spec for hybrid pipeline architecture.
 #
-# Jenkins Kubernetes plugin reads this as the podTemplate.
-# Each pipeline job runs inside an isolated pod with one GPU.
+# This pod runs the Build / Static Analysis / Test / Deploy stages.
+# The Benchmark stage runs on a separate WSL2 host agent (with GPU access
+# via Docker Desktop's --gpus all) — see Jenkinsfile and docs/development-log.md
+# for the rationale (Issues 8/9/10).
 #
-# Prerequisites on the GPU PC:
-#   minikube start --driver=docker --gpus=all
-#   kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.5/nvidia-device-plugin.yml
-#
-# Reference this file in Jenkinsfile:
-#   podTemplate(yaml: readFile('k8s/jenkins-agent.yaml')) { ... }
+# To re-enable GPU pods on native Linux: add the nvidia.com/gpu resource
+# requests/limits below and the matching toleration. The kernel/test code
+# is unchanged.
 
 apiVersion: v1
 kind: Pod
@@ -16,17 +15,12 @@ metadata:
   labels:
     app: kernelflow-agent
 spec:
-  # Tolerate GPU nodes tainted with nvidia.com/gpu=present:NoSchedule
-  tolerations:
-    - key: nvidia.com/gpu
-      operator: Exists
-      effect: NoSchedule
-
   restartPolicy: Never
 
   containers:
     # ------------------------------------------------------------------
-    # Primary build container — runs all pipeline stages
+    # Primary build container — runs Build / Static Analysis / Test / Deploy
+    # No GPU on this pod. GPU stages run on the wsl-host Jenkins agent.
     # ------------------------------------------------------------------
     - name: cuda-build
       image: kernelflow-build:latest   # built from ./Dockerfile; loaded into minikube
@@ -37,21 +31,11 @@ spec:
 
       resources:
         limits:
-          nvidia.com/gpu: "1"          # request exactly one GPU
-          memory: "16Gi"
-          cpu: "8"
-        requests:
-          nvidia.com/gpu: "1"
           memory: "8Gi"
           cpu: "4"
-
-      env:
-        - name: CUDA_HOME
-          value: /usr/local/cuda
-        - name: NVIDIA_VISIBLE_DEVICES
-          value: all
-        - name: NVIDIA_DRIVER_CAPABILITIES
-          value: compute,utility
+        requests:
+          memory: "4Gi"
+          cpu: "2"
 
       volumeMounts:
         - name: workspace
