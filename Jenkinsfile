@@ -88,7 +88,11 @@ pipeline {
                                    -std=c++17 \
                             2>&1 | tee clang-tidy.log || true
                             # Only fail on errors in our own kernel files (not system headers)
-                            ! grep -E "^.*kernels/.+:[0-9]+:[0-9]+: error:" clang-tidy.log
+                            if grep -E "kernels/.+\\.(cu|cuh):[0-9]+:[0-9]+: error:" clang-tidy.log; then
+                                echo "clang-tidy found errors in our kernel code"
+                                exit 1
+                            fi
+                            echo "clang-tidy: no errors in our kernel code (system header noise ignored)"
                         '''
                     }
                     post {
