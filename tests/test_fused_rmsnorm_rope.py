@@ -10,7 +10,6 @@ Run on the GPU PC:
     pytest tests/test_fused_rmsnorm_rope.py -v --tb=short
 """
 
-import math
 import pytest
 import torch
 
