@@ -14,21 +14,16 @@
 
 pipeline {
 
-    // Link this pipeline back to the GitHub repository (shows build status
-    // badges and enables the "Open in GitHub" button in Blue Ocean)
-    properties([
-        gitLabConnection(''),
-        [$class: 'GithubProjectProperty',
-         projectUrlStr: 'https://github.com/LuminousYuzu/KernelFlow/'],
-        pipelineTriggers([githubPush()])
-    ])
-
     agent {
         kubernetes {
             yaml readFile('k8s/jenkins-agent.yaml')
             defaultContainer 'cuda-build'
             retries 1
         }
+    }
+
+    triggers {
+        githubPush()
     }
 
     options {
