@@ -144,11 +144,12 @@ pipeline {
             }
             post {
                 always {
-                    // Publish coverage to Jenkins (requires Cobertura plugin)
-                    cobertura coberturaReportFile: 'coverage.xml',
-                              failUnhealthy: false,
-                              failUnstable: false,
-                              onlyStable: false
+                    // Archive coverage.xml as a build artifact. The legacy `cobertura`
+                    // plugin is incompatible with current Jenkins LTS (removed
+                    // hudson.util.IOException2). When the project moves to the modern
+                    // Coverage plugin, this can become:
+                    //   recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']])
+                    archiveArtifacts artifacts: 'coverage.xml', allowEmptyArchive: true
                     archiveArtifacts artifacts: 'pytest.log', allowEmptyArchive: true
                     junit testResults: '**/junit*.xml', allowEmptyResults: true
                 }
