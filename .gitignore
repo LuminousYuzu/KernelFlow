@@ -99,3 +99,7 @@ wandb/
 jenkins/.env
 jenkins/kube/
 jenkins/minikube-certs/
+
+# Claude Code notification signal files (accidentally created at repo root
+# when running on Windows with mangled path separators)
+C:Users*
