@@ -23,8 +23,8 @@ spec:
     # No GPU on this pod. GPU stages run on the wsl-host Jenkins agent.
     # ------------------------------------------------------------------
     - name: cuda-build
-      image: kernelflow-build:latest   # built from ./Dockerfile; loaded into minikube
-      imagePullPolicy: Never           # image is pre-loaded, not from a registry
+      image: docker.io/library/kernelflow-build:latest   # built from ./Dockerfile; loaded into minikube
+      imagePullPolicy: Never                              # image is pre-loaded, not from a registry
 
       command: ["cat"]
       tty: true
