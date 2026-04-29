@@ -57,49 +57,67 @@ Each kernel must beat its unfused baseline by a defined speedup gate before it c
 
 ### CI/CD Layer
 - **GitHub** — source control, PR webhooks
-- **Jenkins** — pipeline orchestration (Blue Ocean UI), hosted on GPU PC
-- **Kubernetes (minikube)** — isolates each pipeline job in a pod
-- **NVIDIA Device Plugin** — enables GPU access inside K8s pods
+- **Jenkins** — pipeline orchestration (pipeline-graph-view UI), hosted on GPU PC via Docker Compose
+- **Kubernetes (minikube)** — isolates Build/Test/Static Analysis stages in pods
+- **Jenkins host agent** — runs the GPU-dependent Benchmark stage on the WSL2 host (hybrid architecture; see `docs/development-log.md`)
+- **Cloudflare Tunnel** — exposes the local Jenkins to GitHub for webhook delivery (no public IP required)
+- **NVIDIA Device Plugin** — installed in minikube but currently no-op (pods are CPU-only on WSL2)
 
 ### Quality Layer
 - **clang-tidy** — C++ static analysis
-- **compute-sanitizer** — GPU memory safety (out-of-bounds, race conditions)
-- **ruff / pylint** — Python static analysis
-- **pytest + lcov** — test coverage
-- **Codecov** — coverage trend visualization
+- **compute-sanitizer** — GPU memory safety (deferred to host stage; currently no-op in pod)
+- **ruff** — Python static analysis (E, F, W, I rules)
+- **pytest** — numerical correctness tests against PyTorch ground truth
 
 ### Visualization Layer
-- **Nsight Systems** — kernel timeline, CPU/GPU sync analysis
-- **Nsight Compute** — roofline analysis, memory bandwidth utilization
-- **wandb** — benchmark history tracking across commits
-- **Grafana + Prometheus** — system-level monitoring dashboard
-- **Jenkins Blue Ocean** — pipeline status visualization
+- **Nsight Systems** — kernel timeline, CPU/GPU sync analysis (planned)
+- **Nsight Compute** — roofline analysis, memory bandwidth utilization (planned)
+- **wandb** — benchmark history tracking across commits (live, project `kernelflow`)
+- **Grafana + Prometheus** — system-level monitoring dashboard (planned)
+- **Jenkins pipeline-graph-view** — pipeline status visualization (replaces deprecated Blue Ocean)
 
 ---
 
 ## Physical Infrastructure
 
+Hybrid architecture — Build/Test stages run in K8s pods (minikube), the
+GPU-dependent Benchmark stage runs on the WSL2 host directly. This split
+is forced by the WSL2 nested-container GPU limitation; on native Linux all
+stages would run in pods. See `docs/development-log.md` for full rationale.
+
 ```
-MacBook (dev machine)                  Windows PC (GPU worker)
-┌─────────────────────┐               ┌────────────────────────┐
-│                     │               │                        │
-│  VS Code            │  git push     │  GitHub / Gitea        │
-│  code editing       │ ───────────→  │  (local Git server)    │
-│                     │               │          │             │
-│  Jenkins UI         │               │          │ webhook     │
-│  browser access     │ ←───────────  │          ↓             │
-│                     │  results      │     Jenkins            │
-│  wandb UI           │               │          │             │
-│  Grafana UI         │               │          ↓             │
-│                     │               │     minikube (K8s)     │
-└─────────────────────┘               │          │             │
-                                      │          ↓             │
-                                      │     CUDA Pod           │
-                                      │     NVIDIA GPU         │
-                                      └────────────────────────┘
+MacBook (dev)                    Windows 11 + WSL2 (GPU PC)
+┌──────────────────┐             ┌─────────────────────────────────────┐
+│ VS Code          │             │ GitHub.com (cloud)                  │
+│                  │  git push   │   │ webhook                         │
+│                  ├────────────→│   ↓                                 │
+│                  │             │ Cloudflare Tunnel (public HTTPS)    │
+│                  │             │   │ outbound tunnel                 │
+│ Jenkins UI ←─────┼─tunnel URL─→│   ↓                                 │
+│ wandb UI ←───────┼─wandb.ai────│ ┌─Docker Compose──────────────────┐ │
+│                  │             │ │ kernelflow-jenkins (controller) │ │
+│                  │             │ │ kernelflow-cloudflared (sidecar)│ │
+│                  │             │ └──────┬──────────────────────────┘ │
+│                  │             │        │ stage 1-3, 5 → K8s         │
+│                  │             │        ↓                            │
+│                  │             │ ┌─minikube──────────────────────┐  │
+│                  │             │ │ kernelflow-build pod (CPU only)│  │
+│                  │             │ │ Build / Static Anal / Test    │  │
+│                  │             │ └───────────────────────────────┘  │
+│                  │             │        │ stage 4 → host            │
+│                  │             │        ↓                            │
+│                  │             │ jenkins-agent (systemd on WSL2)    │
+│                  │             │   │ docker run --gpus all          │
+│                  │             │   ↓                                 │
+│                  │             │ kernelflow-build container          │
+│                  │             │   ↓ Docker Desktop NVIDIA hooks    │
+└──────────────────┘             │ RTX 4070                            │
+                                 └─────────────────────────────────────┘
 ```
 
-MacBook and PC are on the same LAN. All UIs accessible from MacBook at `http://<PC-LAN-IP>:<port>`.
+MacBook and PC are on the same LAN; UIs reachable at
+`http://<PC-LAN-IP>:8080` or via the tunnel URL from anywhere on the
+public internet.
 
 ---
 
@@ -108,35 +126,59 @@ MacBook and PC are on the same LAN. All UIs accessible from MacBook at `http://<
 ```
 KernelFlow/
 ├── CMakeLists.txt
-├── Dockerfile
-├── Jenkinsfile
+├── Dockerfile                     (CUDA 12.1 build env; used in pod + host)
+├── Jenkinsfile                    (5-stage pipeline; hybrid agent routing)
 ├── .clang-tidy
 ├── LICENSE                        (Apache 2.0)
 │
+├── agent/                         (Claude Code context — auto-loaded)
+│   ├── working-style.md           (collaboration rules)
+│   ├── cicd.md                    (CI/CD authoritative reference)
+│   └── kernels.md                 (kernel design context)
+│
+├── docs/
+│   ├── development-log.md         (every infra issue + decision; ADR-style)
+│   └── local-sop.md               (gitignored cold-start runbook)
+│
 ├── kernels/
+│   ├── common.cuh                 (warp_reduce_sum, block_reduce_sum)
 │   ├── baseline/
 │   │   ├── rmsnorm.cu
 │   │   └── rope.cu
-│   └── fused/
-│       ├── fused_rmsnorm_rope.cu  ← Milestone 1
-│       ├── fused_silu_mul.cu      ← Milestone 2
-│       └── fused_attention.cu     ← Milestone 3
+│   ├── fused/
+│   │   └── fused_rmsnorm_rope.cu  ← Milestone 1 ✅ 1.66× verified
+│   │   (fused_silu_mul.cu and fused_attention.cu are future milestones)
+│   └── extension.cu               (pybind11 PyTorch extension)
 │
 ├── tests/
-│   ├── test_fused_rmsnorm_rope.py
-│   ├── test_fused_silu_mul.py
-│   └── test_fused_attention.py
+│   ├── conftest.py
+│   └── test_fused_rmsnorm_rope.py
 │
 ├── benchmarks/
-│   ├── bench_all.cu
+│   ├── bench_all.cu               (cudaEvent_t timing; 1.5x speedup gate)
 │   └── report.py                  (uploads results to wandb)
 │
-├── setup.py                       (PyTorch Extension packaging)
+├── setup.py                       (PyTorch CUDAExtension packaging)
+│
 ├── k8s/
-│   ├── jenkins-agent.yaml         (GPU-enabled K8s pod spec)
-│   └── grafana-dashboard.json
-└── registry/                      (deploy artifacts)
+│   └── jenkins-agent.yaml         (CPU-only pod spec for build/test stages)
+│
+├── jenkins/
+│   ├── Dockerfile.jenkins         (Jenkins controller image)
+│   ├── docker-compose.yml         (jenkins + cloudflared services)
+│   ├── plugins.txt                (pre-baked plugin list)
+│   ├── casc/jenkins.yaml          (JCasC: realm, K8s cloud, credentials)
+│   ├── kube/                      (gitignored, generated by setup)
+│   ├── minikube-certs/            (gitignored, generated by setup)
+│   └── .env                       (gitignored, contains secrets)
+│
+└── scripts/
+    ├── setup.sh                   (first-time bootstrap)
+    └── register_webhook.sh        (legacy LAN-IP webhook; replaced by tunnel)
 ```
+
+`/opt/kernelflow/registry/` (host directory, not in repo) is the destination
+for the Deploy stage's wheel artifacts.
 
 ---
 
@@ -176,26 +218,34 @@ Build → Static Analysis → Test + Coverage → Benchmark → Deploy
 
 ## Build & Test Commands
 
+These run inside the `kernelflow-build` Docker image — either in a pod (CI)
+or via `docker run` on the host.
+
 ```bash
 # Build
-cmake -B build -DENABLE_COVERAGE=ON
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_COVERAGE=ON \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 make -C build -j$(nproc)
+pip3 install . --no-build-isolation -q   # builds the PyTorch extension wheel
 
 # Test
-pytest tests/ --cov=. --cov-report=xml -v
+pytest tests/ --cov=. --cov-report=xml -v --tb=short
 
-# Benchmark
-./build/bench_all
-python benchmarks/report.py
+# Benchmark (RTX 4070 required; runs on host via docker --gpus all in CI)
+./build/bench_all 2048 4096 10 100
+python3 benchmarks/report.py --result benchmark_result.txt
 
 # Static analysis
-clang-tidy kernels/**/*.cu -- -I/usr/local/cuda/include
-compute-sanitizer --tool memcheck ./build/test_kernel
-ruff check tests/ benchmarks/
+clang-tidy --config-file=.clang-tidy -p build \
+    kernels/baseline/*.cu kernels/fused/*.cu \
+    -- -x cuda --cuda-gpu-arch=sm_86 -I/usr/local/cuda/include -std=c++17
+ruff check tests/ benchmarks/ --select=E,F,W,I --ignore=E501
 
-# Package
-python setup.py bdist_wheel
+# Package (Deploy stage)
+python3 setup.py bdist_wheel --dist-dir dist/
 ```
+
+For cold-start procedure (after a reboot), see `docs/local-sop.md`.
 
 ---
 
