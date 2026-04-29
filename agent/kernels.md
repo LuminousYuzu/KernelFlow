@@ -5,15 +5,25 @@ Read this before touching any kernel code.
 
 ---
 
-## Current milestone status (as of 2026-04-26)
+## Current milestone status (as of 2026-04-29)
 
-| Milestone | Kernel | Status | Gate |
-|-----------|--------|--------|------|
-| 1 | `fused_rmsnorm_rope` | **Scaffolded, not compiled on hardware yet** | ≥ 1.5× speedup, ≤ 1e-5 error |
-| 2 | `fused_silu_mul` | Not started — wait for M1 to pass on real GPU | ≥ 1.3× speedup, ≤ 1e-5 error |
-| 3 | `fused_attention` | Not started | ≥ 2.0× speedup, ≤ 1e-4 error |
+| Milestone | Kernel | Status | Latest result | Gate |
+|-----------|--------|--------|---------------|------|
+| 1 | `fused_rmsnorm_rope` | ✅ **PASSED on RTX 4070** | 1.66× speedup, 0.00e+00 error | ≥ 1.5× speedup, ≤ 1e-5 error |
+| 2 | `fused_silu_mul` | Not started — unblocked | — | ≥ 1.3× speedup, ≤ 1e-5 error |
+| 3 | `fused_attention` | Not started | — | ≥ 2.0× speedup, ≤ 1e-4 error |
 
-**Rule:** Do not start Milestone 2 until `build/bench_all` clears the 1.5× gate on the actual GPU PC hardware.
+Milestone 1 was verified end-to-end through the full Jenkins pipeline against
+real RTX 4070 hardware on 2026-04-28. Build configuration:
+`bench_all 2048 4096 10 100`, Driver 596.21, CUDA 12.1, PyTorch 2.3 cu121.
+HBM traffic saved: 67.1 MB / call (matches the predicted ~64 MB from the
+"two HBM round-trips eliminated" theoretical analysis).
+
+**Whether to start Milestone 2 next is a strategic question** — see
+`docs/handoff-prompt.md`. For a pure CUDA Kernel Engineer role, doing M2/M3
+is the high-value path. For an SDE-leaning role, polishing the surrounding
+infrastructure (observability, perf-regression detection, named tunnel,
+plugin pinning) is more on-target.
 
 ---
 
@@ -95,3 +105,40 @@ Behavioural tests: scale invariance of RMSNorm, norm preservation of RoPE (isome
 ## Build system split
 
 `CMakeLists.txt` builds standalone C++ executables — specifically `build/bench_all` — linked against static kernel libs. `setup.py` builds the Python `.so` extension linked against libtorch. They are intentionally separate: different linker requirements, different consumers (C++ benchmark vs Python import). Merging them would require locating PyTorch's CMake package, which is fragile in offline environments.
+
+---
+
+## Open performance work (P-future polish)
+
+These are known optimisations the kernel could benefit from, recorded so they
+are not lost. None of them block the current 1.5× gate (already cleared at
+1.66×), but each could push speedup higher.
+
+### Stride-2 memory access in fused kernel Phase 2
+
+`kernels/fused/fused_rmsnorm_rope.cu:55-64` — the per-pair load/store pattern
+`xr[2*i]` / `xr[2*i+1]` makes adjacent warp lanes touch indices 0, 2, 4, ...
+That is **stride-2, not coalesced**. Effective memory bandwidth is roughly
+half of peak. Vectorising with `float2` (one 8-byte load per pair instead of
+two 4-byte loads) would restore coalescing. Estimated payoff: ~1.9–2.0×
+speedup vs the current 1.66×. Worth doing before starting Milestone 2 so
+the same vectorisation pattern transfers.
+
+### `time.perf_counter()` in `TestSmokeBenchmark`
+
+`tests/test_fused_rmsnorm_rope.py:254` — uses Python wall-clock, violates
+the project standard "time GPU kernels with `cudaEvent_t`, never
+`std::chrono`". Should use `torch.cuda.Event(enable_timing=True)`. Because
+this is a smoke test (informational only, not a gate), the current numbers
+are misleading but not load-bearing. Replace when convenient.
+
+### Surprisingly perfect numerical agreement
+
+The verified Milestone 1 run reported `max_err = 0.00e+00` against the
+two-kernel baseline. This is much better than the expected ~1e-7 from
+floating-point reordering between the fused and unfused paths. Worth a
+short investigation — possibly nvcc's `--use_fast_math` plus FMA folding
+makes both paths emit identical instruction sequences, in which case the
+fused kernel is genuinely bit-equivalent (not just within tolerance) of
+the baseline at this shape. If true, that's a strong correctness signal
+worth recording explicitly.

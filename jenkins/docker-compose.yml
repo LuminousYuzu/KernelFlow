@@ -58,6 +58,24 @@ services:
       retries: 5
       start_period: 90s    # Jenkins takes ~60 s to boot
 
+  # ---------------------------------------------------------------------------
+  # Cloudflare Tunnel — gives Jenkins a public HTTPS URL so GitHub webhook
+  # deliveries can reach the controller from the public internet without
+  # router port-forwarding. Quick-tunnel mode generates a fresh
+  # *.trycloudflare.com URL on each restart; for a stable URL upgrade to a
+  # Named Tunnel (requires a free Cloudflare account + domain).
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: kernelflow-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://jenkins:8080
+    depends_on:
+      jenkins:
+        condition: service_healthy
+    networks:
+      - default
+
 volumes:
   jenkins_home:
     driver: local

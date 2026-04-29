@@ -59,12 +59,19 @@ Work happens on the Mac. Output is verified on the GPU PC. The two machines shar
 | kBlockSize = 256 | 8 warps, 32-byte smem scratch, sufficient for D up to 8192 |
 | Separate setup.py from CMakeLists.txt | Different linker requirements; offline build robustness |
 | Multibranch pipeline | PRs get isolated runs; Deploy gated to main only |
+| Hybrid pipeline (pod + host agent) | Forced by WSL2 nested-container GPU limit; on native Linux this would all be in pods. See `docs/development-log.md` Issues 8-10 |
+| Cloudflare Tunnel for webhook | GitHub can't reach private LAN IPs; outbound tunnel avoids router config |
+| Pipeline job created via UI (not JCasC) | `job-dsl` plugin's GitHub source API kept breaking; one-time UI click is acceptable |
 
 ---
 
 ## What to do at the start of a new session on the GPU PC
 
-1. Read `agent/cicd.md` for current CI/CD state and the first-run setup sequence
+1. Read `agent/cicd.md` for current CI/CD state and architecture
 2. Read `agent/kernels.md` for kernel status and what milestone is active
-3. Check `git log --oneline -10` to see what was last committed
-4. If the GPU PC has not been bootstrapped yet: run `bash scripts/setup.sh` first
+3. Read `docs/development-log.md` for the full history of issues + decisions
+4. Read `docs/local-sop.md` (gitignored, GPU-PC-local) for cold-start procedure
+5. Check `git log --oneline -10` to see what was last committed
+6. If the GPU PC has not been bootstrapped yet: run `bash scripts/setup.sh` first
+7. After every reboot: follow `docs/local-sop.md` to reload images, refresh
+   minikube credentials, and re-register the webhook (tunnel URL changes)

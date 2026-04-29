@@ -182,6 +182,7 @@ pipeline {
                     docker run --rm --gpus all \
                         -v "${WORKSPACE}:/workspace" \
                         -w /workspace \
+                        -e WANDB_API_KEY="${WANDB_API_KEY}" \
                         kernelflow-build:latest \
                         bash -c '
                             set -e
@@ -189,9 +190,9 @@ pipeline {
                                           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
                             make -C build -j$(nproc)
                             ./build/bench_all 2048 4096 10 100
+                            python3 benchmarks/report.py --result benchmark_result.txt
                         '
                 '''
-                sh 'python3 benchmarks/report.py --result benchmark_result.txt || true'
             }
             post {
                 always {
